@@ -206,6 +206,7 @@
     <div class="phase-line">
       <span class="phase-chip" id="phaseChip">—</span>
       <span class="phase-meta" id="phaseMeta">—</span>
+      <a href="#" id="newTabLink" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pine);text-decoration:none;border-bottom:1px dotted var(--pine)">open in new tab ↗</a>
     </div>
   </header>
 
@@ -254,6 +255,7 @@
       <div class="timer-btns">
         <button class="btn primary big" id="startBtn">Start</button>
         <button class="btn big" id="pauseBtn" disabled>Pause</button>
+        <button class="btn big" id="restartBtn" disabled>Restart</button>
         <button class="btn big" id="stopBtn" disabled>Stop &amp; log</button>
       </div>
       <div class="timer-msg" id="timerMsg"></div>
@@ -456,6 +458,7 @@
 const CATS = {
   swe:  {label:'SWE Incremental', color:'#2F5D50'},
   ml:   {label:'ML Coding',       color:'#3F5E8C'},
+  mlt:  {label:'ML Theory',       color:'#3E8E8E'},
   lc:   {label:'LeetCode',        color:'#C0653B'},
   prob: {label:'Probability',     color:'#7D5185'},
   urop: {label:'UROP',            color:'#B08A3C'},
@@ -811,6 +814,7 @@ function renderTimerIdle(){
   document.getElementById('startBtn').disabled = false;
   document.getElementById('pauseBtn').disabled = true;
   document.getElementById('pauseBtn').textContent = 'Pause';
+  document.getElementById('restartBtn').disabled = true;
   document.getElementById('stopBtn').disabled = true;
   document.title = 'The Ledger — Summer 2026';
 }
@@ -843,12 +847,26 @@ function startTimer(){
   saveNow();
   document.getElementById('startBtn').disabled = true;
   document.getElementById('pauseBtn').disabled = false;
+  document.getElementById('restartBtn').disabled = false;
   document.getElementById('stopBtn').disabled = false;
   const card = document.getElementById('timerCard');
   card.classList.add('running');
   card.style.borderColor = CATS[selCat].color;
   document.getElementById('timerCatLabel').textContent = CATS[selCat].label + ' · running';
   startTick();
+}
+function restartTimer(){
+  const t = timerState(); if (!t) return;
+  if (!confirm('Restart from the top? Progress so far won\u2019t be logged.')) return;
+  t.startedAt = Date.now();
+  t.endAt = Date.now() + t.durMins*60000;
+  t.paused = false;
+  t.remainMs = null;
+  saveNow();
+  document.getElementById('pauseBtn').textContent = 'Pause';
+  document.getElementById('timerCatLabel').textContent = CATS[t.cat].label + ' · running';
+  flashMsg('Restarted — full '+(t.durMins/60).toFixed(t.durMins%60?1:0)+'h on the clock.');
+  tick();
 }
 function pauseTimer(){
   const t = timerState(); if (!t) return;
@@ -909,8 +927,8 @@ function restoreTimer(){
   }
   document.getElementById('startBtn').disabled = true;
   document.getElementById('pauseBtn').disabled = false;
+  document.getElementById('restartBtn').disabled = false;
   document.getElementById('stopBtn').disabled = false;
-  document.getElementById('pauseBtn').textContent = t.paused ? 'Resume' : 'Pause';
   document.getElementById('timerCatLabel').textContent = CATS[t.cat].label + (t.paused ? ' · paused' : ' · running');
   const card = document.getElementById('timerCard');
   card.classList.add('running');
@@ -1375,6 +1393,7 @@ document.getElementById('customMin').addEventListener('input', e=>{
 });
 document.getElementById('startBtn').addEventListener('click', startTimer);
 document.getElementById('pauseBtn').addEventListener('click', pauseTimer);
+document.getElementById('restartBtn').addEventListener('click', restartTimer);
 document.getElementById('stopBtn').addEventListener('click', stopTimer);
 document.getElementById('manualAdd').addEventListener('click', ()=>{
   const mins = parseFloat(document.getElementById('manualMin').value);
@@ -1491,19 +1510,47 @@ window.addEventListener('pagehide', saveNow);
 window.addEventListener('beforeunload', saveNow);
 
 // sync + reset wiring
-document.getElementById('syncUseBtn').addEventListener('click', ()=>{
-  const v = document.getElementById('syncCodeInput').value.trim();
-  if (!v) return;
-  document.getElementById('syncCodeInput').value='';
-  switchSyncCode(v);
-});
-document.getElementById('syncCopyBtn').addEventListener('click', ()=>{
-  const code = getSyncCode();
-  if (navigator.clipboard) navigator.clipboard.writeText(code);
+function syncFlash(msg, isErr){
   const status = document.getElementById('syncStatus');
   const prev = status.innerHTML;
-  status.textContent = 'Copied: '+code;
-  setTimeout(()=>{ status.innerHTML = prev; }, 2000);
+  status.textContent = msg;
+  status.style.color = isErr ? 'var(--red)' : '';
+  setTimeout(()=>{ status.innerHTML = prev; status.style.color=''; }, 2600);
+}
+async function handleUseCode(){
+  const input = document.getElementById('syncCodeInput');
+  const v = input.value.trim();
+  if (!v){ syncFlash('Type a code first — it\u2019s the one shown on your other device.', true); return; }
+  input.value='';
+  try{
+    await switchSyncCode(v);
+    syncFlash('Switched to code '+v.toUpperCase()+' \u2713');
+  }catch(e){
+    console.error('switch sync code failed', e);
+    syncFlash('Something went wrong switching codes — try again.', true);
+  }
+}
+document.getElementById('syncUseBtn').addEventListener('click', handleUseCode);
+document.getElementById('syncCodeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') handleUseCode(); });
+document.getElementById('syncCopyBtn').addEventListener('click', ()=>{
+  const code = getSyncCode();
+  let copied = false;
+  try{
+    if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(code); copied = true; }
+  }catch(e){ /* clipboard blocked in this context — fall through */ }
+  if (!copied){
+    // fallback for sandboxed/embedded previews where the Clipboard API is blocked
+    const tmp = document.createElement('textarea');
+    tmp.value = code; tmp.style.position='fixed'; tmp.style.opacity='0';
+    document.body.appendChild(tmp); tmp.focus(); tmp.select();
+    try{ document.execCommand('copy'); copied = true; }catch(e){}
+    document.body.removeChild(tmp);
+  }
+  syncFlash(copied ? ('Copied: '+code) : ('Your code: '+code+' (select & copy manually)'));
+});
+document.getElementById('newTabLink').addEventListener('click', e=>{
+  e.preventDefault();
+  window.open(window.location.href, '_blank');
 });
 document.getElementById('resetTodayHoursBtn').addEventListener('click', resetTodayHours);
 document.getElementById('resetWeekHoursBtn').addEventListener('click', resetWeekHours);
