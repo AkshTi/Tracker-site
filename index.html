@@ -1650,10 +1650,41 @@ if (!cloudReady){
 } else {
   try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
   const provider = new firebase.auth.GoogleAuthProvider();
-  document.getElementById('googleBtn').addEventListener('click', async ()=>{
-    document.getElementById('authErr').textContent = '';
-    try{ await auth.signInWithPopup(provider); }
-    catch(e){ document.getElementById('authErr').textContent = e.code === 'auth/popup-closed-by-user' ? '' : (e.message || 'Sign-in failed.'); }
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const errEl = document.getElementById('authErr');
+  const btn = document.getElementById('googleBtn');
+
+  function showAuthError(e){
+    console.error('sign-in error:', e);
+    const code = (e && e.code) || '';
+    let msg;
+    if (code === 'auth/unauthorized-domain') msg = 'This domain isn’t authorized in Firebase. In the console: Authentication → Settings → Authorized domains → add "akshti.github.io".';
+    else if (code === 'auth/operation-not-allowed') msg = 'Google sign-in isn’t enabled. In the console: Authentication → Sign-in method → enable Google.';
+    else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') msg = 'The sign-in window closed before finishing — try again.';
+    else msg = (e && e.message) || 'Sign-in failed.';
+    errEl.textContent = msg + (code ? '  ['+code+']' : '');
+  }
+
+  // Returning from a redirect-based sign-in? Surface any error it produced.
+  auth.getRedirectResult().catch(showAuthError);
+
+  btn.addEventListener('click', async ()=>{
+    errEl.style.color = 'var(--red)';
+    errEl.textContent = 'Opening Google…';
+    btn.disabled = true;
+    try{
+      await auth.signInWithPopup(provider);
+      errEl.textContent = '';
+    }catch(e){
+      // Popups are blocked/flaky in many browsers — fall back to a full-page redirect.
+      if (['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code)){
+        errEl.textContent = 'Redirecting to Google…';
+        try{ await auth.signInWithRedirect(provider); return; }
+        catch(e2){ showAuthError(e2); }
+      } else {
+        showAuthError(e);
+      }
+    }finally{ btn.disabled = false; }
   });
   document.getElementById('signOutBtn').addEventListener('click', ()=> auth.signOut());
   showGate(); // cover the app until we know whether a session exists
