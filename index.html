@@ -215,6 +215,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
 
@@ -223,7 +224,8 @@
     <div class="kick">The Ledger · Summer 2026</div>
     <h2>Sign in to your <em>Ledger.</em></h2>
     <p>Your reps, hours, applications, and notes sync to your account. Sign in on any device and pick up exactly where you left off.</p>
-    <button class="gbtn" id="googleBtn">
+    <div id="gsiButtonWrap" style="display:flex;justify-content:center;min-height:44px"></div>
+    <button class="gbtn" id="googleBtn" style="display:none">
       <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
       Continue with Google
     </button>
@@ -638,6 +640,8 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "581846848256",
   appId: "1:581846848256:web:4cef47e075c895e63319e5"
 };
+// OAuth Web client id (from the Firebase-managed Google provider) — used by Google Identity Services.
+const GOOGLE_CLIENT_ID = "581846848256-2vm9v2afqupgorad7nhn1r0hs0jec558.apps.googleusercontent.com";
 let db = null, auth = null, cloudReady = false, currentUid = null;
 try{
   if (FIREBASE_CONFIG.apiKey !== "PASTE_ME" && window.firebase){
@@ -1649,43 +1653,54 @@ if (!cloudReady){
   bootApp();
 } else {
   try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
-  const provider = new firebase.auth.GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
   const errEl = document.getElementById('authErr');
-  const btn = document.getElementById('googleBtn');
 
   function showAuthError(e){
     console.error('sign-in error:', e);
     const code = (e && e.code) || '';
     let msg;
-    if (code === 'auth/unauthorized-domain') msg = 'This domain isn’t authorized in Firebase. In the console: Authentication → Settings → Authorized domains → add "akshti.github.io".';
-    else if (code === 'auth/operation-not-allowed') msg = 'Google sign-in isn’t enabled. In the console: Authentication → Sign-in method → enable Google.';
-    else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') msg = 'The sign-in window closed before finishing — try again.';
-    else msg = (e && e.message) || 'Sign-in failed.';
+    if (code === 'auth/operation-not-allowed') msg = 'Google sign-in isn’t enabled in Firebase (Authentication → Sign-in method → Google).';
+    else msg = (e && e.message) || 'Sign-in failed — check the browser console for details.';
+    errEl.style.color = 'var(--red)';
     errEl.textContent = msg + (code ? '  ['+code+']' : '');
   }
 
-  // Returning from a redirect-based sign-in? Surface any error it produced.
-  auth.getRedirectResult().catch(showAuthError);
-
-  btn.addEventListener('click', async ()=>{
-    errEl.style.color = 'var(--red)';
-    errEl.textContent = 'Opening Google…';
-    btn.disabled = true;
+  // Google Identity Services returns an ID token first-party (no cross-domain popup relay),
+  // which we exchange for a Firebase session. This avoids the third-party-storage stall
+  // that breaks signInWithPopup/Redirect when the app and authDomain are different sites.
+  async function onGoogleCredential(resp){
+    errEl.style.color = 'var(--ink-faint)';
+    errEl.textContent = 'Signing in…';
     try{
-      await auth.signInWithPopup(provider);
+      const cred = firebase.auth.GoogleAuthProvider.credential(resp.credential);
+      await auth.signInWithCredential(cred);
       errEl.textContent = '';
-    }catch(e){
-      // Popups are blocked/flaky in many browsers — fall back to a full-page redirect.
-      if (['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(e.code)){
-        errEl.textContent = 'Redirecting to Google…';
-        try{ await auth.signInWithRedirect(provider); return; }
-        catch(e2){ showAuthError(e2); }
-      } else {
-        showAuthError(e);
-      }
-    }finally{ btn.disabled = false; }
-  });
+    }catch(e){ showAuthError(e); }
+  }
+
+  let gsiTries = 0;
+  function initGsi(){
+    if (!(window.google && google.accounts && google.accounts.id)){
+      if (gsiTries++ < 40){ setTimeout(initGsi, 250); }
+      else { errEl.style.color='var(--red)'; errEl.textContent='Couldn’t load Google sign-in — check your connection and refresh.'; }
+      return;
+    }
+    try{
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: onGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        ux_mode: 'popup'
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('gsiButtonWrap'),
+        { theme:'outline', size:'large', text:'continue_with', shape:'pill', logo_alignment:'left', width:260 }
+      );
+    }catch(e){ showAuthError(e); }
+  }
+  initGsi();
+
   document.getElementById('signOutBtn').addEventListener('click', ()=> auth.signOut());
   showGate(); // cover the app until we know whether a session exists
   auth.onAuthStateChanged(async user=>{
