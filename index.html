@@ -211,6 +211,8 @@
   .gbtn svg{width:18px;height:18px;flex-shrink:0}
   #authErr{color:var(--red);font-size:12.5px;margin-top:16px;min-height:16px}
   body.signed-out{overflow:hidden}
+  /* the display:flex rules above would otherwise override the hidden attribute */
+  #authGate[hidden],#authBar[hidden]{display:none!important}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -231,7 +233,7 @@
     </button>
     <div id="authErr" role="alert"></div>
     <div id="authTrace" style="margin-top:14px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-faint);line-height:1.7;max-height:130px;overflow-y:auto"></div>
-    <div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-faint);letter-spacing:.08em">sign-in v4</div>
+    <div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-faint);letter-spacing:.08em">sign-in v5</div>
   </div>
 </div>
 
