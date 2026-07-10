@@ -230,6 +230,8 @@
       Continue with Google
     </button>
     <div id="authErr" role="alert"></div>
+    <div id="authTrace" style="margin-top:14px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-faint);line-height:1.7;max-height:130px;overflow-y:auto"></div>
+    <div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-faint);letter-spacing:.08em">sign-in v4</div>
   </div>
 </div>
 
@@ -1654,6 +1656,15 @@ if (!cloudReady){
 } else {
   try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); }catch(e){}
   const errEl = document.getElementById('authErr');
+  const traceEl = document.getElementById('authTrace');
+  function trace(msg){
+    console.log('[auth]', msg);
+    if (traceEl){
+      const t = new Date().toTimeString().slice(0,8);
+      traceEl.innerHTML += t+' '+msg.replace(/</g,'&lt;')+'<br>';
+      traceEl.scrollTop = traceEl.scrollHeight;
+    }
+  }
 
   function showAuthError(e){
     console.error('sign-in error:', e);
@@ -1663,17 +1674,21 @@ if (!cloudReady){
     else msg = (e && e.message) || 'Sign-in failed — check the browser console for details.';
     errEl.style.color = 'var(--red)';
     errEl.textContent = msg + (code ? '  ['+code+']' : '');
+    trace('ERROR: '+(code || (e && e.message) || String(e)));
   }
 
   // Google Identity Services returns an ID token first-party (no cross-domain popup relay),
   // which we exchange for a Firebase session. This avoids the third-party-storage stall
   // that breaks signInWithPopup/Redirect when the app and authDomain are different sites.
   async function onGoogleCredential(resp){
+    trace('google returned a credential ('+(resp && resp.credential ? resp.credential.length+' chars' : 'EMPTY')+')');
     errEl.style.color = 'var(--ink-faint)';
     errEl.textContent = 'Signing in…';
     try{
       const cred = firebase.auth.GoogleAuthProvider.credential(resp.credential);
-      await auth.signInWithCredential(cred);
+      trace('exchanging with Firebase…');
+      const result = await auth.signInWithCredential(cred);
+      trace('firebase sign-in OK: uid '+(result && result.user ? result.user.uid.slice(0,8)+'…' : '??'));
       errEl.textContent = '';
     }catch(e){ showAuthError(e); }
   }
@@ -1682,10 +1697,11 @@ if (!cloudReady){
   function initGsi(){
     if (!(window.google && google.accounts && google.accounts.id)){
       if (gsiTries++ < 40){ setTimeout(initGsi, 250); }
-      else { errEl.style.color='var(--red)'; errEl.textContent='Couldn’t load Google sign-in — check your connection and refresh.'; }
+      else { errEl.style.color='var(--red)'; errEl.textContent='Couldn’t load Google sign-in — check your connection and refresh.'; trace('GIS script never loaded'); }
       return;
     }
     try{
+      trace('GIS loaded, rendering button');
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: onGoogleCredential,
@@ -1695,15 +1711,18 @@ if (!cloudReady){
       });
       google.accounts.id.renderButton(
         document.getElementById('gsiButtonWrap'),
-        { theme:'outline', size:'large', text:'continue_with', shape:'pill', logo_alignment:'left', width:260 }
+        { theme:'outline', size:'large', text:'continue_with', shape:'pill', logo_alignment:'left', width:260, click_listener: ()=>trace('button clicked — waiting for Google…') }
       );
+      trace('button rendered ✓ (waiting for click)');
     }catch(e){ showAuthError(e); }
   }
   initGsi();
 
   document.getElementById('signOutBtn').addEventListener('click', ()=> auth.signOut());
   showGate(); // cover the app until we know whether a session exists
+  trace('page loaded · waiting for auth state…');
   auth.onAuthStateChanged(async user=>{
+    trace('auth state: '+(user ? 'SIGNED IN ('+(user.email||user.uid)+')' : 'signed out'));
     if (user){ currentUid = user.uid; showApp(user); await bootApp(); }
     else { currentUid = null; showGate(); }
   });
