@@ -1156,8 +1156,10 @@ function renderHeader(){
   } else {
     chip.textContent = 'LAUNCH'; meta.textContent = 'The summer is banked. Go get it.';
   }
-  const dayIdx = Math.floor(now.getTime()/86400000);
-  const q = QUOTES[dayIdx % QUOTES.length];
+  let qi = parseInt(localStorage.getItem('ledger:quoteIdx') || '-1', 10);
+  qi = (qi + 1) % QUOTES.length;
+  localStorage.setItem('ledger:quoteIdx', String(qi));
+  const q = QUOTES[qi];
   document.getElementById('quoteText').textContent = '“'+q.t+'”';
   document.getElementById('quoteAttr').textContent = q.a;
 }
