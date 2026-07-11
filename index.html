@@ -66,6 +66,7 @@
   /* ---- day calendar ---- */
   .cal-add{display:grid;grid-template-columns:2fr 1.2fr .9fr .8fr auto;gap:8px;margin-bottom:14px}
   .cal-add input,.cal-add select{width:100%;padding:8px 10px;font-size:13px}
+  .cal-wrap{max-height:440px;overflow-y:auto;border-radius:8px}
   .cal{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#FFFEFB}
   .cal-hour{position:absolute;left:0;right:0;border-top:1px solid #EFEDE4;pointer-events:none}
   .cal-hour span{position:absolute;top:-8px;left:6px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-faint);background:#FFFEFB;padding:0 3px}
@@ -321,7 +322,7 @@
       <div id="blockList"></div>
       <div class="bar-outer"><div class="bar-inner" id="todayBar"></div></div>
       <div class="collapse-row">
-        <button class="btn" id="collapseBtn" title="Bad day? Blocks A, B, E + log survive. Never a zero day.">Collapse protocol</button>
+        <button class="btn" id="collapseBtn" title="Bad day? ICF, PyTorch Debugging, and UROP survive. Never a zero day.">Collapse protocol</button>
         <button class="btn" id="clearDayBtn">Reset day</button>
         <button class="btn" id="resetTodayHoursBtn">Reset today's hours</button>
         <span class="hours-note mono" id="hoursWeekNote" style="font-size:12px;color:var(--ink-faint)"></span>
@@ -348,7 +349,7 @@
         <input type="number" id="calMin" min="5" max="480" value="60" title="minutes">
         <button class="btn primary" id="calAdd">Add</button>
       </div>
-      <div class="cal" id="calGrid"></div>
+      <div class="cal-wrap"><div class="cal" id="calGrid"></div></div>
       <div class="cal-legend" id="calLegend"></div>
     </div>
 
@@ -517,20 +518,14 @@ const PLAN_START = new Date(2026, 6, 1);
 const PLAN_END   = new Date(2026, 7, 31);
 
 const WEEKDAY_BLOCKS = [
-  {id:'A', time:'5:30–7:00',  name:'SWE / Incremental', desc:'Timed drill from the SWE pack. Timer visible. No AI help.'},
-  {id:'B', time:'7:20–8:50',  name:'ML Coding', desc:'Blank-file build or injected-bug drill. Timed, spoken.'},
-  {id:'C', time:'9:00–10:00', name:'LeetCode Hard', desc:'One problem, 35-min cap → editorial → redo queue.'},
+  {id:'A', time:'7:00–8:00',  name:'ICF — Fast Implementation', desc:'Timed, fast-implementation drill from the ICF pack. No AI help.'},
+  {id:'B', time:'8:00–9:00',  name:'PyTorch Debugging', desc:'Injected-bug / debugging reps in PyTorch. Timed, spoken.'},
+  {id:'C', time:'9:00–10:00', name:'LeetCode', desc:'One problem, 35-min cap → editorial → redo queue.'},
   {id:'D', time:'10:00–11:00',name:'Rotating slot', desc:''},
-  {id:'E', time:'11:00–11:45',name:'Probability', desc:'3–4 puzzles out loud + ~5 pages of Green Book.'},
-  {id:'L', time:'11:45–12:00',name:'The Log', desc:'Times, bugs, misses by category. Never skipped.'},
+  {id:'E', time:'12:00–2:00', name:'UROP', desc:'Research talk reps, stories, training runs, “why not X?” depth.'},
 ];
-const D_ROTATION = {
-  1:'ML System Design — one design spoken aloud',
-  2:'ML Theory — 5 rapid-fire Qs out loud (even weeks: ML-math quiz drill)',
-  3:'Live mock (wk 4+) · before that: redo-queue reps',
-  4:'UROP — research talk reps, stories, “why not X?” depth',
-  5:'MLSD #2 · behavioral stories · overflow',
-};
+const D_ROTATION_EVEN = {name:'Probability', desc:'3–4 puzzles out loud + ~5 pages of Green Book.'};
+const D_ROTATION_ODD  = {name:'ML Coding', desc:'Blank-file build or injected-bug drill. Timed, spoken.'};
 const SAT_BLOCKS = [
   {id:'S1', time:'9:00–11:30', name:'Full timed mock', desc:'Odd weeks: 90-min ICF. Even weeks: ML hour. Written post-mortem after.'},
   {id:'S2', time:'12:30–3:30', name:'Big build', desc:'Order book / CodeCrafters / GPU weekend — per the week grid.'},
@@ -624,6 +619,19 @@ const QUOTES = [
   {t:'Every bar you turn green in August is a question you don’t fear in September.', a:'—'},
   {t:'Slow is smooth, smooth is fast.', a:'—'},
   {t:'Referrals move applications. Relationships move referrals.', a:'the pipeline'},
+  {t:'You have a right to your actions, but never to the fruits of your actions.', a:'Bhagavad Gita 2.47'},
+  {t:'Perform your work with the mind fixed on the divine, abandoning attachment to results, remaining balanced in success and failure.', a:'Bhagavad Gita 2.48'},
+  {t:'The mind that follows the wandering senses is carried away, as a storm carries a boat on the water.', a:'Bhagavad Gita 2.67'},
+  {t:'He who is disciplined in eating and recreation, disciplined in action, disciplined in sleep and wakefulness — for him yoga becomes the destroyer of suffering.', a:'Bhagavad Gita 6.17'},
+  {t:'For one who has conquered the mind, the mind is the best of friends.', a:'Bhagavad Gita 6.6'},
+  {t:'Destroy the ego at the feet of Shiva, and what remains is only the work.', a:'—'},
+  {t:'Adiyogi sat still for years before he moved at all — stillness is not delay, it is the sharpening of the blade.', a:'on Shiva, the first yogi'},
+  {t:'The third eye does not seek more to look at. It burns away what does not need to be seen.', a:'on Shiva'},
+  {t:'Tandava is destruction in service of what comes next. Burn today’s excuses; build tomorrow’s rep.', a:'on Shiva'},
+  {t:'Vairagya — non-attachment — is not indifference to the work. It is indifference to whether the work is noticed.', a:'—'},
+  {t:'Neti neti: not this, not this. Whatever distracts you today is not the goal — set it down and return to the block.', a:'Advaita Vedanta'},
+  {t:'Even Shiva meditated through the burning of Kama, desire itself, without leaving his seat.', a:'on Shiva'},
+  {t:'Discipline is the offering; the outcome was never yours to hold.', a:'—'},
 ];
 
 const APP_STATUSES = ['Watching','Applied','OA','Phone','Onsite','Offer','Rejected','Ghosted'];
@@ -699,7 +707,9 @@ function blocksFor(d){
   if (dow === 0) return SUN_BLOCKS;
   const wb = WEEKDAY_BLOCKS.map(b => ({...b}));
   const dslot = wb.find(b=>b.id==='D');
-  dslot.desc = D_ROTATION[dow] || '';
+  const rot = (d.getDate() % 2 === 0) ? D_ROTATION_EVEN : D_ROTATION_ODD;
+  dslot.name = rot.name;
+  dslot.desc = rot.desc;
   return wb;
 }
 
@@ -1067,6 +1077,14 @@ function renderCalendar(){
     s.innerHTML = '<i style="background:'+c.color+'"></i>'+c.label;
     leg.appendChild(s);
   });
+
+  // auto-scroll the hour-by-hour view to now, once per day (preserve manual scroll after)
+  const wrap = grid.parentElement;
+  if (wrap && wrap.classList.contains('cal-wrap') && wrap.dataset.scrolledFor !== ds){
+    wrap.dataset.scrolledFor = ds;
+    const nowTop = ((nowMin - CAL_START*60)/60)*PX_HR;
+    wrap.scrollTop = Math.max(0, nowTop - wrap.clientHeight/2);
+  }
 }
 
 /* =============== header + quote =============== */
@@ -1098,7 +1116,7 @@ function renderToday(){
   const day = S.days[ds] || { blocks:{}, note:'', collapse:false };
   const blocks = blocksFor(now);
   const isCollapse = !!day.collapse;
-  const activeIds = isCollapse ? ['A','B','E','L'] : blocks.map(b=>b.id);
+  const activeIds = isCollapse ? ['A','B','E'] : blocks.map(b=>b.id);
 
   document.getElementById('todayTitle').textContent = fmt(now) + (isCollapse ? ' · collapse day' : '');
   const list = document.getElementById('blockList');
@@ -1131,7 +1149,7 @@ function renderToday(){
 
   const cb = document.getElementById('collapseBtn');
   cb.classList.toggle('danger-on', isCollapse);
-  cb.textContent = isCollapse ? 'Collapse protocol: ON (A, B, E, log only)' : 'Collapse protocol';
+  cb.textContent = isCollapse ? 'Collapse protocol: ON (ICF, PyTorch, UROP only)' : 'Collapse protocol';
 
   document.getElementById('dayNote').value = day.note || '';
   renderHoursNote();
@@ -1220,7 +1238,7 @@ function dayScore(day, dateStr){
   if (!day) return {done:0,total:1,frac:0};
   const d = fromStr(dateStr);
   const blocks = blocksFor(d);
-  const active = day.collapse ? ['A','B','E','L'] : blocks.map(b=>b.id);
+  const active = day.collapse ? ['A','B','E'] : blocks.map(b=>b.id);
   const total = active.length;
   const done = active.filter(id=>day.blocks && day.blocks[id]).length;
   return {done,total,frac: total? done/total : 0};
